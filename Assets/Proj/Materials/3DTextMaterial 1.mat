@@ -7,7 +7,7 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: 3DTextMaterial
+  m_Name: 3DTextMaterial 1
   m_Shader: {fileID: 4800000, guid: f38b6583152fc404bbd0799168237666, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
@@ -95,7 +95,7 @@ Material:
     - _ClearCoatSmoothness: 0
     - _ColorMask: 15
     - _Cull: 2
-    - _CullMode: 2
+    - _CullMode: 0
     - _Cutoff: 0.5
     - _DetailAlbedoMapScale: 1
     - _DetailNormalMapScale: 1
@@ -112,10 +112,10 @@ Material:
     - _Metallic: 0
     - _OcclusionStrength: 1
     - _OutlineSoftness: 0
-    - _OutlineWidth: 0
+    - _OutlineWidth: 0.07
     - _Parallax: 0.005
     - _PerspectiveFilter: 0.875
-    - _PlaceAmout: 0.757
+    - _PlaceAmout: 0.44
     - _QueueOffset: 0
     - _ReceiveShadows: 1
     - _ScaleRatioA: 1
@@ -155,8 +155,8 @@ Material:
     - _ClipRect: {r: -32767, g: -32767, b: 32767, a: 32767}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - _FaceColor: {r: 1, g: 1, b: 1, a: 0.8784314}
-    - _OutlineColor: {r: 0, g: 12.623607, b: 95.87458, a: 1}
+    - _FaceColor: {r: 1, g: 1, b: 1, a: 0}
+    - _OutlineColor: {r: 0, g: 14.50071, b: 110.1309, a: 1}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
     - _UnderlayColor: {r: 0, g: 0, b: 0, a: 0.5}
   m_BuildTextureStacks: []
