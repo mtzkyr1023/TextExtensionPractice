@@ -111,11 +111,13 @@ Material:
     - _MaskSoftnessY: 0
     - _Metallic: 0
     - _OcclusionStrength: 1
+    - _OffsetX: 0.5
+    - _OffsetY: 0.5
     - _OutlineSoftness: 0
     - _OutlineWidth: 0.07
     - _Parallax: 0.005
     - _PerspectiveFilter: 0.875
-    - _PlaceAmout: 0.44
+    - _PlaceAmout: 0
     - _QueueOffset: 0
     - _ReceiveShadows: 1
     - _ScaleRatioA: 1
@@ -139,7 +141,7 @@ Material:
     - _Surface: 0
     - _TextureHeight: 512
     - _TextureWidth: 512
-    - _Thickness: 0.44
+    - _Thickness: 0.006
     - _UnderlayDilate: 0
     - _UnderlayOffsetX: 0
     - _UnderlayOffsetY: 0

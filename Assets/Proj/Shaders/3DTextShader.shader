@@ -51,6 +51,9 @@ Properties {
 	
 	_Thickness			("Thickness", Range(0, 1)) = 0.5
 	_PlaceAmout			("Place Amount", Range(0, 1)) = 0.5
+
+	_OffsetX			("OffsetX", Range(0, 1)) = 0.5
+	_OffsetY			("OffsetY", Range(0, 1)) = 0.5
 }
 
 SubShader {
@@ -71,7 +74,7 @@ SubShader {
 		WriteMask [_StencilWriteMask]
 	}
 
-	Cull Off
+	Cull Back
 	ZWrite Off
 	Lighting Off
 	Fog { Mode Off }
@@ -192,6 +195,9 @@ SubShader {
 		
 		float		_PlaceAmout;
 
+		float		_OffsetX;
+		float		_OffsetY;
+
 		float _UIMaskSoftnessX;
         float _UIMaskSoftnessY;
         int _UIVertexColorAlwaysGammaSpace;
@@ -231,6 +237,7 @@ SubShader {
 			half2	underlayParam	: TEXCOORD4;			// Scale(x), Bias(y)
 			#endif
 			float3  positionWS		: TEXCOORD5;
+			float2   texscale		: TEXCOORD6;
 		};
 
 		geom_t VertShader(vertex_t input)
@@ -303,7 +310,7 @@ SubShader {
 			output.vertex = vPosition;
 			output.faceColor = faceColor;
 			output.outlineColor = outlineColor;
-			output.texcoord0 = float4(input.texcoord0.x - 1.0f / _StepCount / 10.0f, input.texcoord0.y + 1.0f / _StepCount / 10.0f, maskUV.x, maskUV.y);
+			output.texcoord0 = float4(input.texcoord0.x, input.texcoord0.y, maskUV.x, maskUV.y);
 			output.param = half4(scale, bias - outline, bias + outline, bias);
 
 			const half2 maskSoftness = half2(max(_UIMaskSoftnessX, _MaskSoftnessX), max(_UIMaskSoftnessY, _MaskSoftnessY));
@@ -324,12 +331,24 @@ SubShader {
 			pixel_t output = (pixel_t)0;
 			float3 normal = float3(UNITY_MATRIX_M[0][2], UNITY_MATRIX_M[1][2], UNITY_MATRIX_M[2][2]);
 
+			float texscalex = 0.0f;
+			float texscaley = 0.0f;
+			texscalex = max(texscalex, abs(input[0].texcoord0.x - input[1].texcoord0.x));
+			texscalex = max(texscalex, abs(input[1].texcoord0.x - input[2].texcoord0.x));
+			texscalex = max(texscalex, abs(input[2].texcoord0.x - input[0].texcoord0.x));
+			texscaley = max(texscaley, abs(input[0].texcoord0.y - input[1].texcoord0.y));
+			texscaley = max(texscaley, abs(input[1].texcoord0.y - input[2].texcoord0.y));
+			texscaley = max(texscaley, abs(input[2].texcoord0.y - input[0].texcoord0.y));
+
 			{
 				output = calcVert(input[0]);
+				output.texscale = float2(texscalex, texscaley);
 				outStream.Append(output);
 				output = calcVert(input[1]);
+				output.texscale = float2(texscalex, texscaley);
 				outStream.Append(output);
 				output = calcVert(input[2]);
+				output.texscale = float2(texscalex, texscaley);
 				outStream.Append(output);
 				outStream.RestartStrip();
 			}
@@ -385,17 +404,29 @@ SubShader {
 
 		half4 raymarching(pixel_t input, float3 dir)
 		{
-			const float scale = 1.0f / _StepCount / 50.0f;
-			float4 texcoord = mul(UNITY_MATRIX_I_M, float4(dir, 1.0f)) * scale;
+			const float scale = 1.0f / _StepCount;
+
+			float3 texcoord = mul((float3x3)UNITY_MATRIX_I_M, dir);
+			texcoord.xy *= input.texscale;
+			texcoord.xy *= 2.0f;
 			float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
 			Light mainLight = GetMainLight(shadowCoord);
 
 			half d = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.texcoord0.xy + texcoord.xy).a * input.param.x;
 			half4 c = input.faceColor * saturate(d - input.param.w);
 
-			float3 lightOS = normalize(mul((float3x3)UNITY_MATRIX_I_M, mainLight.direction));
+			float3 lightOS = mul((float3x3)UNITY_MATRIX_I_M, normalize(mainLight.direction));
+			lightOS.xy *= input.texscale;
 
-			float intensity = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.texcoord0.xy + texcoord.xy - lightOS.xy * scale).a * input.param.x;
+			float intensity = 0.0f;
+			for (int i = 0; i < 8; i++)
+			{
+				intensity += (SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.texcoord0.xy + texcoord.xy + lightOS.xy / 32.0f).a * input.param.x - input.param.w) / 8.0f;
+			}
+
+			intensity = saturate(intensity);
+			intensity = intensity * 0.5f + 0.5f;
+			intensity *= intensity;
 
 			#ifdef OUTLINE_ON
 			c = lerp(input.outlineColor, input.faceColor, saturate(d - input.param.z));
@@ -423,7 +454,7 @@ SubShader {
 			c *= input.texcoord1.z;
 			#endif
 			
-			c *= saturate(intensity - input.param.w);
+			c.rgb *= max(saturate(1.0f - intensity), 0.125f);
 
 			return c;
 		}
@@ -444,14 +475,14 @@ SubShader {
 
 			for (int i = 0; i < stepCount; i++)
 			{
-				c += raymarching(input, dir.xyz * ((float)i + rand(input.vertex.xy)) * _Thickness) / stepCount * (stepCount - i) * 0.38f * 0.5f;
+				c += raymarching(input, dir.xyz * ((float)i + rand(input.vertex.xy)) * _Thickness) / stepCount * (stepCount - i) * 0.3f;
 			} 
 
 			#if UNITY_UI_ALPHACLIP
 			clip(c.a - 0.001);
 			#endif
 
-			return float4(max(c.rgb, float3(0.0f, 0.0f, 0.0f)), c.a);
+			return float4(max(c.rgb, float3(0.0f, 0.0f, 0.0f)), saturate(c.a));
 		}
 		ENDHLSL
 	}
