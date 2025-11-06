@@ -71,7 +71,7 @@ SubShader {
 		WriteMask [_StencilWriteMask]
 	}
 
-	Cull Back
+	Cull Off
 	ZWrite Off
 	Lighting Off
 	Fog { Mode Off }
@@ -231,9 +231,6 @@ SubShader {
 			half2	underlayParam	: TEXCOORD4;			// Scale(x), Bias(y)
 			#endif
 			float3  positionWS		: TEXCOORD5;
-			float2  positionTS		: TEXCOORD6;
-			float3  normalWS			: NORMAL0;
-			float3  tangentWS		: TANGENT0;
 		};
 
 		geom_t VertShader(vertex_t input)
@@ -306,7 +303,7 @@ SubShader {
 			output.vertex = vPosition;
 			output.faceColor = faceColor;
 			output.outlineColor = outlineColor;
-			output.texcoord0 = float4(input.texcoord0.x, input.texcoord0.y, maskUV.x, maskUV.y);
+			output.texcoord0 = float4(input.texcoord0.x - 1.0f / _StepCount / 10.0f, input.texcoord0.y + 1.0f / _StepCount / 10.0f, maskUV.x, maskUV.y);
 			output.param = half4(scale, bias - outline, bias + outline, bias);
 
 			const half2 maskSoftness = half2(max(_UIMaskSoftnessX, _MaskSoftnessX), max(_UIMaskSoftnessY, _MaskSoftnessY));
@@ -318,8 +315,6 @@ SubShader {
 
 			output.positionWS = input.position;
 
-			output.normalWS = TransformObjectToWorldDir(input.normal);
-
 			return output;
 		}
 
@@ -328,22 +323,13 @@ SubShader {
 		{
 			pixel_t output = (pixel_t)0;
 			float3 normal = float3(UNITY_MATRIX_M[0][2], UNITY_MATRIX_M[1][2], UNITY_MATRIX_M[2][2]);
-			float3 tangent = normalize(input[0].position.xyz - input[1].position.xyz);
-			float2 positionTS = min(min(input[0].texcoord0.xy, input[1].texcoord0.xy), input[2].texcoord0.xy);
-			positionTS = (input[0].texcoord0.xy + input[1].texcoord0.xy + input[2].texcoord0.xy) / 3.0f;
 
 			{
 				output = calcVert(input[0]);
-				output.positionTS = positionTS;
-				output.tangentWS = tangent;
 				outStream.Append(output);
 				output = calcVert(input[1]);
-				output.positionTS = positionTS;
-				output.tangentWS = tangent;
 				outStream.Append(output);
 				output = calcVert(input[2]);
-				output.positionTS = positionTS;
-				output.tangentWS = tangent;
 				outStream.Append(output);
 				outStream.RestartStrip();
 			}
@@ -397,19 +383,19 @@ SubShader {
 			return frac(sin(dot(texcoords, float2(12.9898, 78.233))) * 43758.5453);
 		}
 
-		half4 raymarching(pixel_t input, float3 pos, float3 dir)
+		half4 raymarching(pixel_t input, float3 dir)
 		{
-			float4 texcoord = float4(pos + input.normalWS * dot(input.tangentWS, dir), 1.0f);
-			texcoord.xy /= 32.0f;
+			const float scale = 1.0f / _StepCount / 50.0f;
+			float4 texcoord = mul(UNITY_MATRIX_I_M, float4(dir, 1.0f)) * scale;
 			float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
 			Light mainLight = GetMainLight(shadowCoord);
 
-			half d = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, texcoord.xy).a * input.param.x;
+			half d = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.texcoord0.xy + texcoord.xy).a * input.param.x;
 			half4 c = input.faceColor * saturate(d - input.param.w);
 
 			float3 lightOS = normalize(mul((float3x3)UNITY_MATRIX_I_M, mainLight.direction));
 
-			float intensity = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.texcoord0.xy + texcoord.xy - lightOS.xy).a * input.param.x;
+			float intensity = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.texcoord0.xy + texcoord.xy - lightOS.xy * scale).a * input.param.x;
 
 			#ifdef OUTLINE_ON
 			c = lerp(input.outlineColor, input.faceColor, saturate(d - input.param.z));
@@ -437,7 +423,7 @@ SubShader {
 			c *= input.texcoord1.z;
 			#endif
 			
-			//c *= saturate(intensity - input.param.w);
+			c *= saturate(intensity - input.param.w);
 
 			return c;
 		}
@@ -458,17 +444,14 @@ SubShader {
 
 			for (int i = 0; i < stepCount; i++)
 			{
-				c += raymarching(input, positionWS, dir.xyz * ((float)i + rand(input.vertex.xy)) * _Thickness) / stepCount * (stepCount - i) * 0.38f * 0.5f;
+				c += raymarching(input, dir.xyz * ((float)i + rand(input.vertex.xy)) * _Thickness) / stepCount * (stepCount - i) * 0.38f * 0.5f;
 			} 
-
-			float4 positionOS = mul(UNITY_MATRIX_I_M, float4(dir, 1));
 
 			#if UNITY_UI_ALPHACLIP
 			clip(c.a - 0.001);
 			#endif
 
-			// return float4(positionOS.xy, 0.0f, 1.0f);
-			return float4(max(c.rgb, float3(0.0f, 0.0f, 0.0f)), saturate(c.a));
+			return float4(max(c.rgb, float3(0.0f, 0.0f, 0.0f)), c.a);
 		}
 		ENDHLSL
 	}
