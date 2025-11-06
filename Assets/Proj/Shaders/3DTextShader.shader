@@ -49,7 +49,7 @@ Properties {
 
 	_StepCount			("Step Count", Range(1, 64)) = 32
 	
-	_Thickness			("Thickness", Range(0, 1)) = 0.5
+	_Thickness			("Thickness", Range(0, 0.01)) = 0.5
 	_PlaceAmout			("Place Amount", Range(0, 1)) = 0.5
 
 	_OffsetX			("OffsetX", Range(0, 1)) = 0.5
@@ -325,7 +325,7 @@ SubShader {
 			return output;
 		}
 
-		[maxvertexcount(9)]
+		[maxvertexcount(21)]
 		void GeomShader(triangle geom_t input[3], inout TriangleStream<pixel_t> outStream)
 		{
 			pixel_t output = (pixel_t)0;
@@ -395,6 +395,49 @@ SubShader {
 
 				outStream.RestartStrip();
 			}
+			
+			// ‰¡–Ê
+			{
+				geom_t temporary = (geom_t)0;
+				temporary = input[2];
+				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[0].texcoord0.y);
+				output = calcVert(temporary);
+				outStream.Append(output);
+				
+				temporary = input[1];
+				temporary.texcoord0.xy = float2(input[1].texcoord0.x, input[1].texcoord0.y);
+				output = calcVert(temporary);
+				outStream.Append(output);
+
+				temporary = input[2];
+				temporary.position.xyz = input[1].position.xyz + normal * _PlaceAmout;
+				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[1].texcoord0.y);
+				output = calcVert(temporary);
+				outStream.Append(output);
+
+				outStream.RestartStrip();
+			}
+			{
+				geom_t temporary = (geom_t)0;
+				temporary = input[2];
+				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[0].texcoord0.y);
+				output = calcVert(temporary);
+				outStream.Append(output);
+
+				temporary = input[2];
+				temporary.position.xyz = input[1].position.xyz + normal * _PlaceAmout;
+				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[1].texcoord0.y);
+				output = calcVert(temporary);
+				outStream.Append(output);
+				
+				temporary = input[2];
+				temporary.position.xyz = input[2].position.xyz + normal * _PlaceAmout;
+				temporary.texcoord0.xy = float2(input[1].texcoord0.x, input[1].texcoord0.y);
+				output = calcVert(temporary);
+				outStream.Append(output);
+
+				outStream.RestartStrip();
+			}
 		}
 
 		float rand(float2 texcoords)
@@ -402,9 +445,12 @@ SubShader {
 			return frac(sin(dot(texcoords, float2(12.9898, 78.233))) * 43758.5453);
 		}
 
-		half4 raymarching(pixel_t input, float3 dir)
+		half4 raymarching(pixel_t input, float3 pos, float3 dir)
 		{
 			const float scale = 1.0f / _StepCount;
+
+			float4 t = mul(UNITY_MATRIX_I_M, float4(pos, 1));
+			t.xy *= input.texscale;
 
 			float3 texcoord = mul((float3x3)UNITY_MATRIX_I_M, dir);
 			texcoord.xy *= input.texscale;
@@ -475,7 +521,7 @@ SubShader {
 
 			for (int i = 0; i < stepCount; i++)
 			{
-				c += raymarching(input, dir.xyz * ((float)i + rand(input.vertex.xy)) * _Thickness) / stepCount * (stepCount - i) * 0.3f;
+				c += raymarching(input, positionWS, dir.xyz * ((float)i + rand(input.vertex.xy)) * _Thickness) / stepCount * (stepCount - i) * 0.3f;
 			} 
 
 			#if UNITY_UI_ALPHACLIP

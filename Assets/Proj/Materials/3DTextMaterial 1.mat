@@ -141,7 +141,7 @@ Material:
     - _Surface: 0
     - _TextureHeight: 512
     - _TextureWidth: 512
-    - _Thickness: 0.006
+    - _Thickness: 0.00289
     - _UnderlayDilate: 0
     - _UnderlayOffsetX: 0
     - _UnderlayOffsetY: 0
