@@ -352,11 +352,7 @@ SubShader {
 
 			c = raymarching(input, 0.0f);
 
-			#if UNITY_UI_ALPHACLIP
-			clip(c.a - 0.001);
-			#endif
-
-			return float4(max(c.rgb, float3(0.0f, 0.0f, 0.0f)), c.a);
+			return c.rrrr;
 		}
 		ENDHLSL
 	}

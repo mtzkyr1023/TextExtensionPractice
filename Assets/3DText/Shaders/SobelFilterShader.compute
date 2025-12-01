@@ -1,9 +1,11 @@
 
+#pragma kernel BlurPass
 #pragma kernel FirstPassFilter
 #pragma kernel SecondPassFilter
 #pragma kernel ThirdPassFilter
 
 Texture2D<float> SourceTex;
+RWTexture2D<float> ResultBlurTex;
 RWTexture2D<float4> ResultInside;
 RWTexture2D<float4> ResultOutside;
 RWTexture2D<float> Result;
@@ -97,6 +99,20 @@ float4 UpdateDistanceOutside(float4 p, int2 pos, int2 offset)
 }
 
 [numthreads(1,1,1)]
+void BlurPass(uint3 id : SV_DispatchThreadID)
+{
+    float p = 0.0f;
+    for (int i = 0; i < 9; i++)
+    {
+        int x = i % 3 - 1;
+        int y = i / 3 - 1;
+        p += SourceTex[(int2)id.xy + int2(x, y)];
+    }
+    
+    ResultBlurTex[id.xy] = SourceTex[id.xy];
+}
+
+[numthreads(1,1,1)]
 void FirstPassFilter(uint3 id : SV_DispatchThreadID)
 {
     float3x3 verticalFilter = float3x3(-1, -2, -1, 0, 0, 0, 1, 2, 1);
@@ -110,14 +126,14 @@ void FirstPassFilter(uint3 id : SV_DispatchThreadID)
     {
         int x = i % 3 - 1;
         int y = i / 3 - 1;
-        resultVert += verticalFilter[y + 1][x + 1] * SourceTex[uint2(x, y) + id.xy].r;
+        resultVert += verticalFilter[y + 1][x + 1] * SourceTex[int2(x, y) + id.xy].r;
     }
     
     for (i = 0; i < 9; i++)
     {
         int x = i % 3 - 1;
         int y = i / 3 - 1;
-        resultHorz += horizontalFilter[y + 1][x + 1] * SourceTex[uint2(x, y) + id.xy].r;
+        resultHorz += horizontalFilter[y + 1][x + 1] * SourceTex[int2(x, y) + id.xy].r;
     }
     
     float2 grad = float2(resultHorz, resultVert);

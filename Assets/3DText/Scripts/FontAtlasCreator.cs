@@ -41,11 +41,13 @@ public class FontAtlasCreatorWindow : EditorWindow
     
     private List<Glyph> glyphs;
     private Texture2D baseAtlasTexture;
+    private RenderTexture blurTexture;
     private RenderTexture insideTexture;
     private RenderTexture outsideTexture;
     private RenderTexture resultTexture;
     private RenderTexture sdfTexture;
 
+    private int blurPassKernel;
     private int firstPassFilterKernel;
     private int secondPassFilterKernel;
     private int thirdPassFilterKernel;
@@ -53,7 +55,7 @@ public class FontAtlasCreatorWindow : EditorWindow
     private int width;
     private int height;
 
-    private const int fontSize = 96;
+    private const int fontSize = 90;
     private const int maxWidth = 2048;
 
     [MenuItem("EasyAssets/FontAtlasCreator")]
@@ -136,7 +138,7 @@ public class FontAtlasCreatorWindow : EditorWindow
             Glyph glyph = glyphs[i];
             glyph.glyphRect = new GlyphRect(x, y, fontSize, fontSize);
 
-            FontEngineProxy.RenderGlyphToTexture(glyph, 0, GlyphRenderMode.RASTER_HINTED, baseAtlasTexture);
+            FontEngineProxy.RenderGlyphToTexture(glyph, 9, GlyphRenderMode.SMOOTH, baseAtlasTexture);
         }
 
         baseAtlasTexture.Apply();
@@ -144,6 +146,13 @@ public class FontAtlasCreatorWindow : EditorWindow
 
     private void GenerateSDFTexture()
     {
+        {
+            RenderTextureDescriptor desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.RFloat);
+            desc.dimension = TextureDimension.Tex2D;
+            desc.enableRandomWrite = true;
+            blurTexture = new RenderTexture(desc);
+        }
+
         {
             RenderTextureDescriptor desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.ARGBFloat);
             desc.dimension = TextureDimension.Tex2D;
@@ -166,17 +175,21 @@ public class FontAtlasCreatorWindow : EditorWindow
         }
 
         {
-            RenderTextureDescriptor desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.RFloat);
+            RenderTextureDescriptor desc = new RenderTextureDescriptor(width / 1, height / 1, RenderTextureFormat.RFloat);
             desc.dimension = TextureDimension.Tex2D;
             desc.enableRandomWrite = true;
             sdfTexture = new RenderTexture(desc);
         }
 
+        blurPassKernel = sobelFilterShader.FindKernel("BlurPass");
         firstPassFilterKernel = sobelFilterShader.FindKernel("FirstPassFilter");
         secondPassFilterKernel = sobelFilterShader.FindKernel("SecondPassFilter");
         thirdPassFilterKernel = sobelFilterShader.FindKernel("ThirdPassFilter");
 
-        sobelFilterShader.SetTexture(firstPassFilterKernel, "SourceTex", baseAtlasTexture);
+        sobelFilterShader.SetTexture(blurPassKernel, "SourceTex", baseAtlasTexture);
+        sobelFilterShader.SetTexture(blurPassKernel, "ResultBlurTex", blurTexture);
+
+        sobelFilterShader.SetTexture(firstPassFilterKernel, "SourceTex", blurTexture);
         sobelFilterShader.SetTexture(firstPassFilterKernel, "ResultInside", insideTexture);
         sobelFilterShader.SetTexture(firstPassFilterKernel, "ResultOutside", outsideTexture);
 
@@ -191,6 +204,8 @@ public class FontAtlasCreatorWindow : EditorWindow
         sobelFilterShader.SetFloat("maxInside", 8.0f);
         sobelFilterShader.SetFloat("maxOutside", 8.0f);
 
+        sobelFilterShader.Dispatch(blurPassKernel, width / 1, height / 1, 1);
+
         sobelFilterShader.Dispatch(firstPassFilterKernel, width / 1, height / 1, 1);
 
         for (int i = 0; i < 32; i++)
@@ -199,37 +214,30 @@ public class FontAtlasCreatorWindow : EditorWindow
         }
 
         sobelFilterShader.Dispatch(thirdPassFilterKernel, width / 1, height / 1, 1);
+
+        Graphics.Blit(resultTexture, sdfTexture);
     }
 
     private void SaveSDFAtlas()
     {
         RenderTexture tmp = RenderTexture.active;
-        var path = EditorUtility.SaveFilePanelInProject(title: "Save Texture", defaultName: "test", extension: "png", message: "Save Texture");
+        var path = EditorUtility.SaveFilePanelInProject(title: "Save Texture", defaultName: "test", extension: "asset", message: "Save Texture");
         if (path == null)
         {
+            RenderTexture.active = tmp;
             Debug.LogError("FontAtlasCreator:path is null.");
             return;
         }
 
-        RenderTexture.active = resultTexture;
+        RenderTexture.active = sdfTexture;
 
-        Texture2D texture = new Texture2D(width, height, TextureFormat.RFloat, false);
-        texture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+        Texture2D texture = new Texture2D(width / 1, height / 1, TextureFormat.RFloat, false);
+        texture.ReadPixels(new Rect(0, 0, width / 1, height / 1), 0, 0);
         texture.Apply();
 
         RenderTexture.active = tmp;
 
-        var bytes = texture.EncodeToPNG();
-
-        System.IO.File.WriteAllBytes(path, bytes);
-
-        AssetDatabase.Refresh();
-
-        if (texture)
-        {
-            DestroyImmediate(texture);
-            texture = null;
-        }
+        FontAtlas.CreateFontAtlas(texture, path);
     }
 
     private void Release()
