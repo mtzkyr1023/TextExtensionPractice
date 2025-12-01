@@ -1,0 +1,11 @@
+
+#pragma kernel BoardGenerateShaderMain
+
+
+RWTexture3D<float> OutputVolume;
+
+[numthreads(8,8,8)]
+void BoardGenerateShaderMain (uint3 id : SV_DispatchThreadID)
+{
+    OutputVolume[id.xyz] = 1.0f;
+}

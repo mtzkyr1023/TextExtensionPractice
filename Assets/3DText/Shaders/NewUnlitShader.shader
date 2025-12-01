@@ -1,5 +1,5 @@
 
-Shader "TMPCustom/3DTextShadersa" {
+Shader "TMPCustom/DistanceField" {
 
 Properties {
 	_FaceColor          ("Face Color", Color) = (1,1,1,1)
@@ -304,13 +304,8 @@ SubShader {
 			float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
 			Light mainLight = GetMainLight(shadowCoord);
 
-			half d = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.texcoord0.xy + texcoord.xy).a * input.param.x;
+			half d = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.texcoord0.xy).r * input.param.x;
 			half4 c = input.faceColor * saturate(d - input.param.w);
-
-			float3 lightOS = normalize(mul((float3x3)UNITY_MATRIX_I_M, mainLight.direction));
-
-			float intensity = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.texcoord0.xy + texcoord.xy - lightOS.xy * scale).a * input.param.x;
-			intensity = input.faceColor * saturate(intensity - input.param.w);
 
 			#ifdef OUTLINE_ON
 			c = lerp(input.outlineColor, input.faceColor, saturate(d - input.param.z));
@@ -338,9 +333,6 @@ SubShader {
 			c *= input.texcoord1.z;
 			#endif
 
-			
-			c.rgb *= max(intensity, 0.05f);
-
 			return c;
 		}
 
@@ -358,10 +350,7 @@ SubShader {
 
 			int stepCount = _StepCount;
 
-			for (int i = 0; i < stepCount; i++)
-			{
-				c += raymarching(input, dir.xyz * (float)i * 0.5f) / stepCount * (stepCount - i) * 0.38f * 0.5f;
-			} 
+			c = raymarching(input, 0.0f);
 
 			#if UNITY_UI_ALPHACLIP
 			clip(c.a - 0.001);

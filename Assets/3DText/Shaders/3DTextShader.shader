@@ -677,8 +677,9 @@ SubShader {
 
 		float rand(float2 texcoords)
 		{
+			return 0.0f;
 			//return SAMPLE_TEXTURE2D(_NoiseTex, sampler_NoiseTex, texcoords);
-			return frac(sin(dot(texcoords, float2(12.9898, 78.233))) * 43758.5453);
+			//return frac(sin(dot(texcoords, float2(12.9898, 78.233))) * 43758.5453);
 		}
 
 		half4 raymarching(pixel_t input, float3 pos, float3 dir)

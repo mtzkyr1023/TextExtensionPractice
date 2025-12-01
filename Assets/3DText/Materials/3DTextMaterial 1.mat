@@ -120,7 +120,7 @@ Material:
     - _OutlineSoftness: 0
     - _OutlineWidth: 0.054
     - _Parallax: 0.005
-    - _PerspectiveFilter: 0.875
+    - _PerspectiveFilter: 0
     - _PlaceAmount: 52.8
     - _PlaceAmout: 0.177
     - _QueueOffset: 0
@@ -147,7 +147,7 @@ Material:
     - _Surface: 0
     - _TextureHeight: 512
     - _TextureWidth: 512
-    - _Thickness: 0.02
+    - _Thickness: 0.00102
     - _UnderlayDilate: 0
     - _UnderlayOffsetX: 0
     - _UnderlayOffsetY: 0
