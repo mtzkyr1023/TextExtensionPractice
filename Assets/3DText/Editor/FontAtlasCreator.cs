@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.VersionControl;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.TextCore;
@@ -35,9 +36,11 @@ public static class FontEngineProxy
 public class FontAtlasCreatorWindow : EditorWindow
 {
 
-    [SerializeField] private ComputeShader sobelFilterShader;
-    [SerializeField] private Font font;
-    [SerializeField] private TextAsset texts;
+    private ComputeShader sobelFilterShader;
+    private Font font;
+    private TextAsset texts;
+    private int fontSize;
+    private int maxWidth;
     
     private List<Glyph> glyphs;
     private Texture2D baseAtlasTexture;
@@ -47,6 +50,8 @@ public class FontAtlasCreatorWindow : EditorWindow
     private RenderTexture resultTexture;
     private RenderTexture sdfTexture;
 
+    private Dictionary<char, int> characterIndex;
+
     private int blurPassKernel;
     private int firstPassFilterKernel;
     private int secondPassFilterKernel;
@@ -54,9 +59,6 @@ public class FontAtlasCreatorWindow : EditorWindow
 
     private int width;
     private int height;
-
-    private const int fontSize = 90;
-    private const int maxWidth = 2048;
 
     [MenuItem("EasyAssets/FontAtlasCreator")]
     private static void ShowWindow()
@@ -69,6 +71,9 @@ public class FontAtlasCreatorWindow : EditorWindow
         sobelFilterShader = (ComputeShader)EditorGUILayout.ObjectField("SobelFilterShader", sobelFilterShader, typeof(ComputeShader), false);
         font = (Font)EditorGUILayout.ObjectField("BaseFontAsset", font, typeof(Font), false);
         texts = (TextAsset)EditorGUILayout.ObjectField("Texts", texts, typeof(TextAsset), false);
+        fontSize = EditorGUILayout.IntField("FontSize", fontSize);
+        maxWidth = EditorGUILayout.IntField("Width", maxWidth);
+
         if (GUILayout.Button("Create"))
         {
             CreateAtlas();
@@ -101,11 +106,17 @@ public class FontAtlasCreatorWindow : EditorWindow
 
         glyphs = new List<Glyph>();
 
+        characterIndex = new Dictionary<char, int>();
+
+        int index = 0;
+
         foreach (var character in texts.text)
         {
             if (FontEngine.TryGetGlyphWithUnicodeValue(character, GlyphLoadFlags.LOAD_COMPUTE_METRICS | GlyphLoadFlags.LOAD_NO_BITMAP, out var glyph))
             {
                 glyphs.Add(glyph);
+                characterIndex.Add(character, index);
+                index++;
             }
         }
 
@@ -116,9 +127,9 @@ public class FontAtlasCreatorWindow : EditorWindow
         }
 
         width = maxWidth;
-        height = (glyphs.Count * fontSize / width) * fontSize;
-
         int columnCount = width / fontSize;
+        int rowCount = maxWidth / fontSize;
+        height = (glyphs.Count / rowCount / fontSize + 1) * maxWidth;
 
         baseAtlasTexture = new Texture2D(width, height, TextureFormat.R8, false);
 
@@ -168,14 +179,14 @@ public class FontAtlasCreatorWindow : EditorWindow
         }
 
         {
-            RenderTextureDescriptor desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.RFloat);
+            RenderTextureDescriptor desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.ARGB32);
             desc.dimension = TextureDimension.Tex2D;
             desc.enableRandomWrite = true;
             resultTexture = new RenderTexture(desc);
         }
 
         {
-            RenderTextureDescriptor desc = new RenderTextureDescriptor(width / 1, height / 1, RenderTextureFormat.RFloat);
+            RenderTextureDescriptor desc = new RenderTextureDescriptor(width / 1, height / 1, RenderTextureFormat.ARGB32);
             desc.dimension = TextureDimension.Tex2D;
             desc.enableRandomWrite = true;
             sdfTexture = new RenderTexture(desc);
@@ -201,8 +212,8 @@ public class FontAtlasCreatorWindow : EditorWindow
         sobelFilterShader.SetTexture(thirdPassFilterKernel, "ResultOutside", outsideTexture);
         sobelFilterShader.SetTexture(thirdPassFilterKernel, "Result", resultTexture);
 
-        sobelFilterShader.SetFloat("maxInside", 8.0f);
-        sobelFilterShader.SetFloat("maxOutside", 8.0f);
+        sobelFilterShader.SetFloat("maxInside", 16.0f);
+        sobelFilterShader.SetFloat("maxOutside", 16.0f);
 
         sobelFilterShader.Dispatch(blurPassKernel, width / 1, height / 1, 1);
 
@@ -231,13 +242,25 @@ public class FontAtlasCreatorWindow : EditorWindow
 
         RenderTexture.active = sdfTexture;
 
-        Texture2D texture = new Texture2D(width / 1, height / 1, TextureFormat.RFloat, false);
+        Texture2D texture = new Texture2D(width / 1, height / 1, TextureFormat.Alpha8, false);
         texture.ReadPixels(new Rect(0, 0, width / 1, height / 1), 0, 0);
         texture.Apply();
 
         RenderTexture.active = tmp;
 
-        FontAtlas.CreateFontAtlas(texture, path);
+        texture.name = "Font Atlas";
+        FontAtlas atlas = FontAtlas.CreateFontAtlas(texture, characterIndex, fontSize, width, height);
+
+
+        AssetDatabase.CreateAsset(atlas, path);
+
+        AssetDatabase.AddObjectToAsset(texture, atlas);
+
+        EditorUtility.SetDirty(atlas);
+
+        AssetDatabase.SaveAssets();
+
+        AssetDatabase.Refresh();
     }
 
     private void Release()

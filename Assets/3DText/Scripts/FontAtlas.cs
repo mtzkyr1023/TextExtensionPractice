@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -5,20 +6,29 @@ using UnityEngine;
 public class FontAtlas : ScriptableObject
 {
     [SerializeField]
-    public Texture2D fontAtlasTexture;
+    internal Texture2D fontAtlasTexture;
 
-    public static void CreateFontAtlas(Texture2D texture, string path)
+    [SerializeField]
+    internal Dictionary<char, int> characterIndex;
+
+    [SerializeField]
+    internal int fontSize;
+
+    [SerializeField]
+    internal int atlasWidth;
+
+    [SerializeField]
+    internal int atlasHeight;
+
+    public static FontAtlas CreateFontAtlas(Texture2D texture, Dictionary<char, int> index, int size, int width, int height)
     {
-
         var asset = CreateInstance<FontAtlas>();
         asset.fontAtlasTexture = texture;
+        asset.characterIndex = index;
+        asset.fontSize = size;
+        asset.atlasWidth = width;
+        asset.atlasHeight = height;
 
-        AssetDatabase.CreateAsset(asset, path);
-
-        EditorUtility.SetDirty(asset);
-
-        AssetDatabase.SaveAssets();
-
-        AssetDatabase.Refresh();
+        return asset;
     }
 }
