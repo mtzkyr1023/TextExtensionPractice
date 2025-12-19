@@ -1,0 +1,114 @@
+#pragma kernel IFFTY
+#define PI 3.14159265358979323846264338328
+
+Texture2D<float4> SrcTexReal;
+Texture2D<float4> SrcTexImag;
+
+RWTexture2D<float4> DstTexReal;
+RWTexture2D<float4> DstTexImag;
+
+static const int M = 10;
+static const int N = 1 << M;
+groupshared float4 blockReal[N];
+groupshared float4 blockImag[N];
+
+[numthreads(N / 2, 1, 1)]
+void IFFTY(uint id : SV_DispatchThreadID, uint grid : SV_GroupID, uint gi : SV_GroupIndex)
+{
+    {
+        uint2 srcIndex0 = uint2(gi * 2, grid);
+        uint2 srcIndex1 = uint2(gi * 2 + 1, grid);
+    
+        blockReal[gi * 2] = SrcTexReal[srcIndex0];
+        blockReal[gi * 2 + 1] = SrcTexReal[srcIndex1];
+        blockImag[gi * 2] = SrcTexImag[srcIndex0];
+        blockImag[gi * 2 + 1] = SrcTexImag[srcIndex1];
+    
+        for (int loopidx = 0; loopidx < M; loopidx++)
+        {
+            int dleng = 1 << (M - loopidx - 1);
+            uint t = gi % dleng;
+            uint t0 = (gi / dleng) * dleng * 2 + t;
+            uint t1 = t0 + dleng;
+            GroupMemoryBarrierWithGroupSync();
+            float4 r1 = blockReal[t1];
+            float4 i1 = blockImag[t1];
+            float4 r0 = blockReal[t0] - r1;
+            float4 i0 = blockImag[t0] - i1;
+            float rad = PI * t / dleng;
+            float fsin = sin(rad);
+            float fcos = cos(rad);
+            blockReal[t0] += r1;
+            blockImag[t0] += i1;
+            blockReal[t1] = r0 * fcos - i0 * fsin;
+            blockImag[t1] = r0 * fsin + i0 * fcos;
+        }
+    
+        GroupMemoryBarrierWithGroupSync();
+        float4 real0 = blockReal[reversebits(gi * 2) >> (32 - M)];
+        float4 real1 = blockReal[reversebits(gi * 2 + 1) >> (32 - M)];
+        float4 imag0 = blockImag[reversebits(gi * 2) >> (32 - M)];
+        float4 imag1 = blockImag[reversebits(gi * 2 + 1) >> (32 - M)];
+        real1 = -real1;
+        imag1 = -imag1;
+    
+        uint2 destIndex1 = uint2(grid, ((gi * 2) + N / 2) % N);
+        uint2 destIndex2 = uint2(grid, ((gi * 2 + 1) + N / 2) % N);
+    
+        DstTexReal[destIndex1] = real0 / 1;
+        DstTexReal[destIndex2] = real1 / 1;
+        DstTexImag[destIndex1] = imag0 / 1;
+        DstTexImag[destIndex2] = imag1 / 1;
+    }
+    
+    GroupMemoryBarrierWithGroupSync();
+    
+    {
+        uint2 srcIndex0 = uint2(gi * 2 + 0, grid + N);
+        uint2 srcIndex1 = uint2(gi * 2 + 1, grid + N);
+    
+        blockReal[gi * 2 + 0] = SrcTexReal[srcIndex0];
+        blockReal[gi * 2 + 1] = SrcTexReal[srcIndex1];
+        blockImag[gi * 2 + 0] = SrcTexImag[srcIndex0];
+        blockImag[gi * 2 + 1] = SrcTexImag[srcIndex1];
+    
+        for (int loopidx = 0; loopidx < M; loopidx++)
+        {
+            int dleng = 1 << (M - loopidx - 1);
+            uint t = gi % dleng;
+            uint t0 = (gi / dleng) * dleng * 2 + t;
+            uint t1 = t0 + dleng;
+            GroupMemoryBarrierWithGroupSync();
+            float4 r1 = blockReal[t1];
+            float4 i1 = blockImag[t1];
+            float4 r0 = blockReal[t0] - r1;
+            float4 i0 = blockImag[t0] - i1;
+            float rad = PI * t / dleng;
+            float fsin = sin(rad);
+            float fcos = cos(rad);
+            blockReal[t0] += r1;
+            blockImag[t0] += i1;
+            blockReal[t1] = r0 * fcos - i0 * fsin;
+            blockImag[t1] = r0 * fsin + i0 * fcos;
+        }
+    
+        GroupMemoryBarrierWithGroupSync();
+        float4 real0 = blockReal[reversebits(gi * 2) >> (32 - M)];
+        float4 real1 = blockReal[reversebits(gi * 2 + 1) >> (32 - M)];
+        float4 imag0 = blockImag[reversebits(gi * 2) >> (32 - M)];
+        float4 imag1 = blockImag[reversebits(gi * 2 + 1) >> (32 - M)];
+        real1 = -real1;
+        imag1 = -imag1;
+    
+        uint2 destIndex1 = uint2(grid, ((gi * 2) + N / 2) % N + N);
+        uint2 destIndex2 = uint2(grid, ((gi * 2 + 1) + N / 2) % N + N);
+    
+        float phase1 = -PI * (float(destIndex1.x) / (float) N + float(destIndex1.y - N) / (float) N + float(destIndex1.x * (destIndex1.y - N)) / (float) (N * N));
+        float phase2 = -PI * (float(destIndex1.x) / (float) N + float(destIndex1.y - N) / (float) N + float(destIndex2.x * (destIndex2.y - N)) / (float) (N * N));
+    
+        DstTexReal[destIndex1] = real0;
+        DstTexReal[destIndex2] = real1;
+        DstTexImag[destIndex1] = imag0;
+        DstTexImag[destIndex2] = imag1;
+    }
+}

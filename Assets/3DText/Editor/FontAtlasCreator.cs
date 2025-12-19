@@ -129,7 +129,7 @@ public class FontAtlasCreatorWindow : EditorWindow
         width = maxWidth;
         int columnCount = width / fontSize;
         int rowCount = maxWidth / fontSize;
-        height = (glyphs.Count / rowCount / fontSize + 1) * maxWidth;
+        height = (glyphs.Count / rowCount / columnCount + 1) * maxWidth;
 
         baseAtlasTexture = new Texture2D(width, height, TextureFormat.R8, false);
 
@@ -212,14 +212,14 @@ public class FontAtlasCreatorWindow : EditorWindow
         sobelFilterShader.SetTexture(thirdPassFilterKernel, "ResultOutside", outsideTexture);
         sobelFilterShader.SetTexture(thirdPassFilterKernel, "Result", resultTexture);
 
-        sobelFilterShader.SetFloat("maxInside", 16.0f);
-        sobelFilterShader.SetFloat("maxOutside", 16.0f);
+        sobelFilterShader.SetFloat("maxInside", fontSize / 4);
+        sobelFilterShader.SetFloat("maxOutside", fontSize / 4);
 
         sobelFilterShader.Dispatch(blurPassKernel, width / 1, height / 1, 1);
 
         sobelFilterShader.Dispatch(firstPassFilterKernel, width / 1, height / 1, 1);
 
-        for (int i = 0; i < 32; i++)
+        for (int i = 0; i < 64; i++)
         {
             sobelFilterShader.Dispatch(secondPassFilterKernel, width / 1, height / 1, 1);
         }
