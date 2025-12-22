@@ -14,16 +14,14 @@ public class ConvolutionBloomRenderFeature : ScriptableRendererFeature
     private ComputeShader multiplyShader;
     private ComputeShader spectralShader;
 
-    [SerializeField] private Shader colorClipShader;
-    [SerializeField] private Shader bloomShader;
-    [SerializeField] private Shader polygonShader;
+    private Shader colorClipShader;
+    private Shader bloomShader;
+    private Shader polygonShader;
 
     [SerializeField, Range(3, 10)] private int vertexCount;
-    [SerializeField, Range(0.0f, 1.0f)] private float polygonSize;
     [SerializeField, Range(0.0f, 128.0f)] private float bloomThreshold;
     [SerializeField, Range(0.0f, 32.0f)] private float bloomIntensity;
     [SerializeField, Range(0.0f, 3.141592f)] private float polygonRotation;
-    [SerializeField, Range(0.0f, 1.0f)] private float lensOpen;
 
     private ConvolutionBloomRenderPass pass;
 
@@ -57,6 +55,20 @@ public class ConvolutionBloomRenderFeature : ScriptableRendererFeature
             spectralShader = Resources.Load("SpectralScale") as ComputeShader;
         }
 
+        if (colorClipShader == null)
+        {
+            colorClipShader = Resources.Load("HDRClip") as Shader;
+        }
+        if (bloomShader == null)
+        {
+            bloomShader = Resources.Load("ConvolutionBloom") as Shader;
+        }
+        if (polygonShader == null)
+        {
+            polygonShader = Resources.Load("Polygon") as Shader;
+        }
+
+
         pass?.Dispose();
         this.name = "Convolution Bloom";
         pass = new ConvolutionBloomRenderPass(
@@ -70,11 +82,9 @@ public class ConvolutionBloomRenderFeature : ScriptableRendererFeature
             multiplyShader,
             spectralShader,
             vertexCount,
-            polygonSize,
             polygonRotation,
             bloomThreshold,
-            bloomIntensity,
-            lensOpen);
+            bloomIntensity);
 
         pass.Setup();
     }
