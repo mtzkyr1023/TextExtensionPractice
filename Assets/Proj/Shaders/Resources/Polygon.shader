@@ -36,12 +36,7 @@ Shader "Unlit/Polygon"
                float2 uv : TEXCOORD0;
                float4 positionHCS : SV_POSITION;
            };
-                        
-            float noise(float2 uv)
-            {
-                return dot(uv, normalize(float2(1000.0f, 2000.0f)));
-            }
-
+                      
             float2 rotation(float2 p, float theta)
             {
 	            return float2((p.x) * cos(theta) - p.y * sin(theta), p.x * sin(theta) +  p.y * cos(theta));

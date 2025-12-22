@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e35764e4143ce154990cf5d95f6b3849
+timeCreated: 1426434637
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 42394
+  packageName: Weathered Rings
+  packageVersion: 1.0
+  assetPath: Assets/Rings/Materials/Silver Rings.mat
+  uploadId: 177997

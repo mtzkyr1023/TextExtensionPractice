@@ -15,7 +15,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     
     float2 texcoord = (float2(id.xy) / float(N) * 2.0f - 1.0f);
     
-    float factor = smoothstep(0.9f, 0.95f, length(texcoord)) * step(1.0f / float(N) * 2.0f, length(texcoord));
+    float factor = smoothstep(0.99f, 0.9f, length(texcoord)) * step(1.0f / float(N) * 1.0f, length(texcoord));
     
     Real[id.xy] = length(Real[id.xy] * factor + Imag[id.xy]);
     

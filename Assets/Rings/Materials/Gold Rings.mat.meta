@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 43b34c03b07bf6d4a9d0587a9ea5c3e4
+timeCreated: 1426426529
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 42394
+  packageName: Weathered Rings
+  packageVersion: 1.0
+  assetPath: Assets/Rings/Materials/Gold Rings.mat
+  uploadId: 177997

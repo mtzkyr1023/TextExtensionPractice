@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 2304b7aca1fb9254f9b1e05574c802b9
+timeCreated: 1427125841
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 42394
+  packageName: Weathered Rings
+  packageVersion: 1.0
+  assetPath: Assets/Rings/Materials/Copper Rings.mat
+  uploadId: 177997

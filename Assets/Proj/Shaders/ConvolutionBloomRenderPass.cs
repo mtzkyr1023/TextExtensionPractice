@@ -15,6 +15,7 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
     {
         public int vertexCount;
         public float rotation;
+        public float lensSize;
 
         public Material material;
         public TextureHandle source;
@@ -60,6 +61,18 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
         public TextureHandle dstRealTex;
         public TextureHandle dstImagTex;
     }
+
+    public class GenPhasePassData
+    {
+        public ComputeShader shader;
+        public int kernelSize;
+
+        public TextureHandle source;
+        public TextureHandle dstReal;
+        public TextureHandle dstImag;
+    }
+
+
 #else
     private RTHandle realTex0;
     private RTHandle imagTex0;
@@ -94,6 +107,7 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
     private ComputeShader ifftyShader;
     private ComputeShader convolutionShader;
     private ComputeShader spectralScaleShader;
+    private ComputeShader genPhaseShader;
 
     private Shader colorClipShader;
     private Shader compositionShader;
@@ -103,6 +117,7 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
     private float bloomThreshold;
     private float bloomIntensity;
     private float polygonRotation;
+    private float lensSize;
 
     private static readonly int TempColorBufferId = UnityEngine.Shader.PropertyToID("_TempColorBuffer");
     private static readonly int SourceColorBufferId = UnityEngine.Shader.PropertyToID("_SourceColorBuffer");
@@ -129,10 +144,12 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
         ComputeShader iffty,
         ComputeShader convolution,
         ComputeShader spectralScaleShader,
+        ComputeShader genPhaseShader,
         int vertexCount,
         float polygonRotation,
         float bloomThreshold,
-        float bloomIntensity)
+        float bloomIntensity,
+        float lensSize)
     {
         this.colorClipShader = colorClipShader;
         this.compositionShader = compositionShader;
@@ -146,10 +163,12 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
         this.ifftyShader = iffty;
         this.convolutionShader = convolution;
         this.spectralScaleShader = spectralScaleShader;
+        this.genPhaseShader = genPhaseShader;
         this.vertexCount = vertexCount;
         this.polygonRotation = polygonRotation;
         this.bloomThreshold = bloomThreshold;
         this.bloomIntensity = bloomIntensity;
+        this.lensSize = lensSize;
 
         this.kernelFFTX = fftxShader.FindKernel("FFTX");
         this.kernelFFTY = fftyShader.FindKernel("FFTY");
@@ -324,6 +343,7 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
         {
             passData.vertexCount = vertexCount;
             passData.rotation = polygonRotation;
+            passData.lensSize = lensSize;
             passData.material = polygonMaterial;
             passData.source = source;
 
@@ -332,10 +352,36 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
             builder.SetRenderFunc<PSFPassData>(static (passData, context) =>
             {
                 passData.material.SetInt("_NCount", passData.vertexCount);
-                passData.material.SetFloat("_Theta", passData.rotation);
+                passData.material.SetFloat("_Theta", passData.rotation * Mathf.Deg2Rad);
                 passData.material.SetFloat("_Open", 0.0f);
-                passData.material.SetFloat("_Size", 0.75f);
+                passData.material.SetFloat("_Size", passData.lensSize);
                 Blitter.BlitTexture(context.cmd, Vector2.one, passData.material, 0);
+            });
+        }
+
+        using (var builder = renderGraph.AddComputePass("PSF Phase Gen Pass", out GenPhasePassData passData))
+        {
+            passData.shader = genPhaseShader;
+            passData.kernelSize = kernelSize;
+            passData.source = kernelTex;
+            passData.dstReal = kernelRealTex0;
+            passData.dstImag = kernelImagTex0;
+
+            builder.UseTexture(kernelTex, AccessFlags.Read);
+            builder.UseTexture(kernelRealTex0, AccessFlags.ReadWrite);
+            builder.UseTexture(kernelImagTex0, AccessFlags.ReadWrite);
+
+            builder.SetRenderFunc(static (GenPhasePassData passData, ComputeGraphContext context) =>
+            {
+                int kernel = passData.shader.FindKernel("CSMain");
+                context.cmd.SetComputeTextureParam(passData.shader, kernel, "Source", passData.source);
+                context.cmd.SetComputeTextureParam(passData.shader, kernel, "DstReal", passData.dstReal);
+                context.cmd.SetComputeTextureParam(passData.shader, kernel, "DstImag", passData.dstImag);
+                context.cmd.SetComputeFloatParam(passData.shader, "Defocus", 0.0f);
+                context.cmd.SetComputeFloatParam(passData.shader, "Aberration", 0.0f);
+                context.cmd.SetComputeFloatParam(passData.shader, "PhaseNoiseStrength", 0.0f);
+
+                context.cmd.DispatchCompute(passData.shader, kernel, passData.kernelSize / 8, passData.kernelSize / 8, 1);
             });
         }
 
@@ -344,13 +390,15 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
             passData.shader = fftxShader;
             passData.kernelIndex = kernelFFTX;
             passData.kernelSize = kernelSize;
-            passData.srcRealTex = kernelTex;
-            passData.dstRealTex = kernelRealTex0;
-            passData.dstImagTex = kernelImagTex0;
+            passData.srcRealTex = kernelRealTex0;
+            passData.srcImagTex = kernelImagTex0;
+            passData.dstRealTex = kernelRealTex1;
+            passData.dstImagTex = kernelImagTex1;
 
-            builder.UseTexture(kernelTex, AccessFlags.Read);
-            builder.UseTexture(kernelRealTex0, AccessFlags.ReadWrite);
-            builder.UseTexture(kernelImagTex0, AccessFlags.ReadWrite);
+            builder.UseTexture(passData.srcRealTex, AccessFlags.Read);
+            builder.UseTexture(passData.srcImagTex, AccessFlags.Read);
+            builder.UseTexture(passData.dstRealTex, AccessFlags.ReadWrite);
+            builder.UseTexture(passData.dstImagTex, AccessFlags.ReadWrite);
 
             builder.SetRenderFunc(static (FFTPassData passData, ComputeGraphContext context) =>
             {
@@ -367,10 +415,10 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
             passData.shader = fftyShader;
             passData.kernelIndex = kernelFFTY;
             passData.kernelSize = kernelSize;
-            passData.srcRealTex = kernelRealTex0;
-            passData.srcImagTex = kernelImagTex0;
-            passData.dstRealTex = kernelRealTex1;
-            passData.dstImagTex = kernelImagTex1;
+            passData.srcRealTex = kernelRealTex1;
+            passData.srcImagTex = kernelImagTex1;
+            passData.dstRealTex = kernelRealTex0;
+            passData.dstImagTex = kernelImagTex0;
 
             builder.UseTexture(passData.srcRealTex, AccessFlags.Read);
             builder.UseTexture(passData.srcImagTex, AccessFlags.Read);
@@ -393,8 +441,8 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
             passData.shader = spectralScaleShader;
             passData.kernelIndex = kernelSpectrum;
             passData.kernelSize = kernelSize;
-            passData.srcRealTex = kernelRealTex1;
-            passData.srcImagTex = kernelImagTex1;
+            passData.srcRealTex = kernelRealTex0;
+            passData.srcImagTex = kernelImagTex0;
 
 
             builder.UseTexture(passData.srcRealTex, AccessFlags.ReadWrite);
@@ -414,9 +462,10 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
             passData.shader = fftxShader;
             passData.kernelIndex = kernelFFTX;
             passData.kernelSize = kernelSize;
-            passData.srcRealTex = kernelRealTex1;
-            passData.dstRealTex = kernelRealTex0;
-            passData.dstImagTex = kernelImagTex0;
+            passData.srcRealTex = kernelRealTex0;
+            passData.srcImagTex = kernelImagTex0;
+            passData.dstRealTex = kernelRealTex1;
+            passData.dstImagTex = kernelImagTex1;
 
             builder.UseTexture(passData.srcRealTex, AccessFlags.Read);
             builder.UseTexture(passData.dstRealTex, AccessFlags.ReadWrite);
@@ -437,10 +486,10 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
             passData.shader = fftyShader;
             passData.kernelIndex = kernelFFTY;
             passData.kernelSize = kernelSize;
-            passData.srcRealTex = kernelRealTex0;
-            passData.srcImagTex = kernelImagTex0;
-            passData.dstRealTex = kernelRealTex1;
-            passData.dstImagTex = kernelImagTex1;
+            passData.srcRealTex = kernelRealTex1;
+            passData.srcImagTex = kernelImagTex1;
+            passData.dstRealTex = kernelRealTex0;
+            passData.dstImagTex = kernelImagTex0;
 
             builder.UseTexture(passData.srcRealTex, AccessFlags.Read);
             builder.UseTexture(passData.srcImagTex, AccessFlags.Read);
@@ -515,8 +564,8 @@ public class ConvolutionBloomRenderPass : ScriptableRenderPass
             passData.kernelSize = kernelSize;
             passData.srcRealTex = realTex1;
             passData.srcImagTex = imagTex1;
-            passData.kernelRealTex = kernelRealTex1;
-            passData.kernelImagTex = kernelImagTex1;
+            passData.kernelRealTex = kernelRealTex0;
+            passData.kernelImagTex = kernelImagTex0;
             passData.dstRealTex = realTex0;
             passData.dstImagTex = imagTex0;
 

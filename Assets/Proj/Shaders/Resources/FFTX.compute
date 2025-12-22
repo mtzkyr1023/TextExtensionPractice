@@ -2,6 +2,7 @@
 #define PI 3.14159265358979323846264338328
 
 Texture2D<float4> SrcTexReal;
+Texture2D<float4> SrcTexImag;
 
 RWTexture2D<float4> DstTexReal;
 RWTexture2D<float4> DstTexImag;
