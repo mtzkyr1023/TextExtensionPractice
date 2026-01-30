@@ -13,11 +13,6 @@ MonoBehaviour:
   m_Name: Convolution Bloom
   m_EditorClassIdentifier: 
   m_Active: 1
-  vertexCount: 6
-  bloomThreshold: 30.6
-  bloomIntensity: 14.2
-  polygonRotation: -11
-  kernelSize: 0.702
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0

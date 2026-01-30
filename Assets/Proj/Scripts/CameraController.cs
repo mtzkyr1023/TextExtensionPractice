@@ -22,7 +22,8 @@ namespace EasyAsset
         
         void Start()
         {
-
+            rotationX = transform.localRotation.eulerAngles.x;
+            rotationY = transform.localRotation.eulerAngles.y;
         }
 
         void Update()

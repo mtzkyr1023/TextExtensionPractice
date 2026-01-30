@@ -48,9 +48,6 @@ Properties {
 	_ColorMask			("Color Mask", Float) = 15
 
 	_StepCount			("Step Count", Range(1, 128)) = 32
-	
-	_Thickness			("Thickness", Range(0, 0.02)) = 0.5
-	_PlaceAmount		("PlaceAmount", Range(1, 200)) = 1
 
 	_StepSize			("StepSize", Range(0, 1)) = 1.0
 
@@ -91,7 +88,6 @@ SubShader {
 
 		HLSLPROGRAM
 		#pragma vertex VertShader
-        #pragma geometry GeomShader
 		#pragma fragment PixShader
 		
 		#pragma shader_feature __ OUTLINE_ON
@@ -202,8 +198,6 @@ SubShader {
         float _UIMaskSoftnessY;
         int _UIVertexColorAlwaysGammaSpace;
 
-		float		_Thickness;
-		float		_PlaceAmount;
 		float		_StepSize;
 		CBUFFER_END
 
@@ -214,15 +208,6 @@ SubShader {
 			float4	color			: COLOR;
 			float4	texcoord0		: TEXCOORD0;
 			float2	texcoord1		: TEXCOORD1;
-		};
-
-		struct geom_t {
-			UNITY_VERTEX_INPUT_INSTANCE_ID
-			float4 position			: SV_POSITION;
-			float3 normal			: NORMAL0;
-			float4 color			: COLOR0;
-			float4 texcoord0		: TEXCOORD0;
-			float2 texcoord1		: TEXCOORD1;
 		};
 
 		struct pixel_t {
@@ -239,35 +224,19 @@ SubShader {
 			half2	underlayParam	: TEXCOORD4;			// Scale(x), Bias(y)
 			#endif
 			float3  positionWS		: TEXCOORD5;
-			float2   texscale		: TEXCOORD6;
 			float3  normalWS			: NORMAL0;
-			float2 minuv			: TEXCOORD8;
-			float2 maxuv			: TEXCOORD9;
 		};
 
-		geom_t VertShader(vertex_t input)
-		{
-			geom_t output = (geom_t)0;
-
-			output.position = float4(TransformObjectToWorld(input.vertex), 1.0f);
-			output.normal = input.normal;
-			output.color = input.color;
-			output.texcoord0 = input.texcoord0;
-			output.texcoord1 = input.texcoord1;
-
-			return output;
-		}
-
-		pixel_t calcVert(geom_t input)
+		pixel_t VertShader(vertex_t input)
 		{
 			pixel_t output = (pixel_t)0;
 
 			float bold = step(input.texcoord0.w, 0);
 
-			float4 vert = input.position;
+			float3 vert = TransformObjectToWorld(input.vertex);
 			vert.x += _VertexOffsetX;
 			vert.y += _VertexOffsetY;
-			float4 vPosition = TransformWorldToHClip(vert); 
+			float4 vPosition = TransformWorldToHClip(float4(vert, 1.0f)); 
 
 			float2 pixelSize = vPosition.w;
 			pixelSize /= float2(_ScaleX, _ScaleY) * abs(mul((float2x2)UNITY_MATRIX_P, _ScreenParams.xy));
@@ -325,354 +294,9 @@ SubShader {
 			output.underlayParam = half2(layerScale, layerBias);
 			#endif
 
-			output.positionWS = input.position;
+			output.positionWS = vert;
 
 			return output;
-		}
-
-		[maxvertexcount(24)]
-		void GeomShader(triangle geom_t input[3], inout TriangleStream<pixel_t> outStream)
-		{
-			float3 n = float3(UNITY_MATRIX_M[0][2], UNITY_MATRIX_M[1][2], UNITY_MATRIX_M[2][2]);
-			float texscalex = 0.0f;
-			float texscaley = 0.0f;
-			texscalex = max(texscalex, abs(input[0].texcoord0.x - input[1].texcoord0.x));
-			texscalex = max(texscalex, abs(input[1].texcoord0.x - input[2].texcoord0.x));
-			texscalex = max(texscalex, abs(input[2].texcoord0.x - input[0].texcoord0.x));
-			texscaley = max(texscaley, abs(input[0].texcoord0.y - input[1].texcoord0.y));
-			texscaley = max(texscaley, abs(input[1].texcoord0.y - input[2].texcoord0.y));
-			texscaley = max(texscaley, abs(input[2].texcoord0.y - input[0].texcoord0.y));
-
-			const float difftex = 1.0f;
-			const float PlaceAmount = _PlaceAmount * _Thickness;
-
-			float2 minuv = min(input[0].texcoord0.xy, input[1].texcoord0.xy);
-			float2 maxuv = max(input[0].texcoord0.xy, input[1].texcoord0.xy);
-			
-			minuv = min(minuv, input[2].texcoord0.xy);
-			maxuv = max(maxuv, input[2].texcoord0.xy);
-
-			const float scale = 0.5f;
-
-			// ëOñ 
-			{
-				pixel_t output[3];
-				output[0] = calcVert(input[0]);
-				output[0].texscale = float2(texscalex, texscaley);
-				output[1] = calcVert(input[1]);
-				output[1].texscale = float2(texscalex, texscaley);
-				output[2] = calcVert(input[2]);
-				output[2].texscale = float2(texscalex, texscaley);
-
-				float3 ab = output[1].positionWS - output[0].positionWS;
-				float3 bc = output[2].positionWS - output[1].positionWS;
-
-				float3 normal = normalize(cross(ab, bc));
-
-				output[0].normalWS = normal;
-				output[1].normalWS = normal;
-				output[2].normalWS = normal;
-
-				output[0].minuv = minuv;
-				output[0].maxuv = maxuv;
-				output[1].minuv = minuv;
-				output[1].maxuv = maxuv;
-				output[2].minuv = minuv;
-				output[2].maxuv = maxuv;
-
-				outStream.Append(output[0]);
-				outStream.Append(output[1]);
-				outStream.Append(output[2]);
-				outStream.RestartStrip();
-			}
-			{
-				pixel_t output[3];
-				output[0] = calcVert(input[0]);
-				output[0].texscale = float2(texscalex, texscaley);
-				output[1] = calcVert(input[1]);
-				output[1].texscale = float2(texscalex, texscaley);
-				output[2] = calcVert(input[2]);
-				output[2].texscale = float2(texscalex, texscaley);
-
-				float3 ab = output[1].positionWS - output[0].positionWS;
-				float3 bc = output[2].positionWS - output[1].positionWS;
-
-				float3 normal = normalize(cross(ab, bc));
-
-				output[0].normalWS = normal;
-				output[1].normalWS = normal;
-				output[2].normalWS = normal;
-
-				output[0].minuv = minuv;
-				output[0].maxuv = maxuv;
-				output[1].minuv = minuv;
-				output[1].maxuv = maxuv;
-				output[2].minuv = minuv;
-				output[2].maxuv = maxuv;
-
-				outStream.Append(output[0]);
-				outStream.Append(output[1]);
-				outStream.Append(output[2]);
-				outStream.RestartStrip();
-			}
-
-			// å„ñ 
-			{
-				pixel_t output[3];
-				geom_t temporary = (geom_t)0;
-				
-				temporary = input[0];
-				temporary.position.xyz += n * PlaceAmount * scale;
-				output[0] = calcVert(temporary);
-				output[0].texscale = float2(texscalex, texscaley);
-				
-				temporary = input[2];
-				temporary.position.xyz += n * PlaceAmount * scale;
-				output[1] = calcVert(temporary);
-				output[1].texscale = float2(texscalex, texscaley);
-				
-				temporary = input[1];
-				temporary.position.xyz += n * PlaceAmount * scale;
-				output[2] = calcVert(temporary);
-				output[2].texscale = float2(texscalex, texscaley);
-
-				float3 ab = output[1].positionWS - output[0].positionWS;
-				float3 bc = output[2].positionWS - output[1].positionWS;
-
-				float3 normal = normalize(cross(ab, bc));
-
-				output[0].normalWS = normal;
-				output[1].normalWS = normal;
-				output[2].normalWS = normal;
-
-				output[0].minuv = minuv;
-				output[0].maxuv = maxuv;
-				output[1].minuv = minuv;
-				output[1].maxuv = maxuv;
-				output[2].minuv = minuv;
-				output[2].maxuv = maxuv;
-
-				outStream.Append(output[0]);
-				outStream.Append(output[1]);
-				outStream.Append(output[2]);
-				outStream.RestartStrip();
-			}
-			{
-				pixel_t output[3];
-				geom_t temporary = (geom_t)0;
-				
-				temporary = input[0];
-				temporary.position.xyz += n * PlaceAmount * scale;
-				output[0] = calcVert(temporary);
-				output[0].texscale = float2(texscalex, texscaley);
-				
-				temporary = input[2];
-				temporary.position.xyz += n * PlaceAmount * scale;
-				output[1] = calcVert(temporary);
-				output[1].texscale = float2(texscalex, texscaley);
-				
-				temporary = input[1];
-				temporary.position.xyz += n * PlaceAmount * scale;
-				output[2] = calcVert(temporary);
-				output[2].texscale = float2(texscalex, texscaley);
-
-				float3 ab = output[1].positionWS - output[0].positionWS;
-				float3 bc = output[2].positionWS - output[1].positionWS;
-
-				float3 normal = normalize(cross(ab, bc));
-
-				output[0].normalWS = normal;
-				output[1].normalWS = normal;
-				output[2].normalWS = normal;
-
-				output[0].minuv = minuv;
-				output[0].maxuv = maxuv;
-				output[1].minuv = minuv;
-				output[1].maxuv = maxuv;
-				output[2].minuv = minuv;
-				output[2].maxuv = maxuv;
-
-				outStream.Append(output[0]);
-				outStream.Append(output[1]);
-				outStream.Append(output[2]);
-				outStream.RestartStrip();
-			}
-
-			// ç∂âEñ 
-			{
-				pixel_t output[3];
-				geom_t temporary = (geom_t)0;
-
-				temporary = input[0];
-				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[0].texcoord0.y);
-				output[0] = calcVert(temporary);
-				
-				temporary = input[2];
-				temporary.position.xyz = input[1].position.xyz + n * PlaceAmount * scale;
-				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[1].texcoord0.y);
-				output[1] = calcVert(temporary);
-
-				temporary = input[1];
-				temporary.texcoord0.xy = float2(input[1].texcoord0.x, input[1].texcoord0.y);
-				output[2] = calcVert(temporary);
-
-				float3 ab = output[1].positionWS - output[0].positionWS;
-				float3 bc = output[2].positionWS - output[1].positionWS;
-
-				float3 normal = normalize(cross(ab, bc));
-
-				output[0].normalWS = normal;
-				output[1].normalWS = normal;
-				output[2].normalWS = normal;
-
-				output[0].texscale = float2(texscalex, texscaley) * 1.0f;
-				output[1].texscale = float2(texscalex, texscaley) * 1.0f;
-				output[2].texscale = float2(texscalex, texscaley) * 1.0f;
-
-				output[0].minuv = minuv;
-				output[0].maxuv = maxuv;
-				output[1].minuv = minuv;
-				output[1].maxuv = maxuv;
-				output[2].minuv = minuv;
-				output[2].maxuv = maxuv;
-
-				outStream.Append(output[0]);
-				outStream.Append(output[1]);
-				outStream.Append(output[2]);
-
-				outStream.RestartStrip();
-			}
-			{
-				pixel_t output[3];
-				geom_t temporary = (geom_t)0;
-
-				temporary = input[0];
-				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[0].texcoord0.y);
-				output[0] = calcVert(temporary);
-
-				temporary = input[1];
-				temporary.position.xyz = input[0].position.xyz + n * PlaceAmount * scale;
-				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[0].texcoord0.y);
-				output[1] = calcVert(temporary);
-
-				temporary = input[2];
-				temporary.position.xyz = input[1].position.xyz + n * PlaceAmount * scale;
-				temporary.texcoord0.xy = float2(input[1].texcoord0.x, input[1].texcoord0.y);
-				output[2] = calcVert(temporary);
-
-				float3 ab = output[1].positionWS - output[0].positionWS;
-				float3 bc = output[2].positionWS - output[1].positionWS;
-
-				float3 normal = normalize(cross(ab, bc));
-				
-				output[0].normalWS = normal;
-				output[1].normalWS = normal;
-				output[2].normalWS = normal;
-
-				output[0].texscale = float2(texscalex, texscaley);
-				output[1].texscale = float2(texscalex, texscaley);
-				output[2].texscale = float2(texscalex, texscaley);
-
-				output[0].minuv = minuv;
-				output[0].maxuv = maxuv;
-				output[1].minuv = minuv;
-				output[1].maxuv = maxuv;
-				output[2].minuv = minuv;
-				output[2].maxuv = maxuv;
-
-				outStream.Append(output[0]);
-				outStream.Append(output[1]);
-				outStream.Append(output[2]);
-
-				outStream.RestartStrip();
-			}
-			
-			// è„â∫ñ 
-			{
-				pixel_t output[3];
-				geom_t temporary = (geom_t)0;
-				temporary = input[2];
-				temporary.texcoord0.xy = float2(input[2].texcoord0.x, input[1].texcoord0.y);
-				output[0] = calcVert(temporary);
-				
-				temporary = input[1];
-				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[1].texcoord0.y);
-				output[1] = calcVert(temporary);
-
-				temporary = input[2];
-				temporary.position.xyz = input[1].position.xyz + n * PlaceAmount * scale;
-				temporary.texcoord0.xy = float2(input[0].texcoord0.x, input[1].texcoord0.y);
-				output[2] = calcVert(temporary);
-
-				float3 ab = output[1].positionWS - output[0].positionWS;
-				float3 bc = output[2].positionWS - output[1].positionWS;
-
-				float3 normal = normalize(cross(ab, bc));
-				
-				output[0].normalWS = normal;
-				output[1].normalWS = normal;
-				output[2].normalWS = normal;
-
-				output[0].texscale = float2(texscalex, texscaley);
-				output[1].texscale = float2(texscalex, texscaley);
-				output[2].texscale = float2(texscalex, texscaley);
-
-				output[0].minuv = minuv;
-				output[0].maxuv = maxuv;
-				output[1].minuv = minuv;
-				output[1].maxuv = maxuv;
-				output[2].minuv = minuv;
-				output[2].maxuv = maxuv;
-
-				outStream.Append(output[0]);
-				outStream.Append(output[1]);
-				outStream.Append(output[2]);
-
-				outStream.RestartStrip();
-			}
-			{
-				pixel_t output[3];
-				geom_t temporary = (geom_t)0;
-				temporary = input[2];
-				temporary.texcoord0.xy = float2(input[2].texcoord0.x, input[1].texcoord0.y);
-				output[0] = calcVert(temporary);
-
-				temporary = input[2];
-				temporary.position.xyz = input[1].position.xyz + n * PlaceAmount * scale;
-				temporary.texcoord0.xy = float2(input[1].texcoord0.x, input[1].texcoord0.y);
-				output[1] = calcVert(temporary);
-				
-				temporary = input[2];
-				temporary.position.xyz = input[2].position.xyz + n * PlaceAmount * scale;
-				temporary.texcoord0.xy = float2(input[2].texcoord0.x, input[1].texcoord0.y);
-				output[2] = calcVert(temporary);
-				
-				float3 ab = output[1].positionWS - output[0].positionWS;
-				float3 bc = output[2].positionWS - output[1].positionWS;
-
-				float3 normal = normalize(cross(ab, bc));
-				
-				output[0].normalWS = normal;
-				output[1].normalWS = normal;
-				output[2].normalWS = normal;
-
-				output[0].texscale = float2(texscalex, texscaley);
-				output[1].texscale = float2(texscalex, texscaley);
-				output[2].texscale = float2(texscalex, texscaley);
-
-				output[0].minuv = minuv;
-				output[0].maxuv = maxuv;
-				output[1].minuv = minuv;
-				output[1].maxuv = maxuv;
-				output[2].minuv = minuv;
-				output[2].maxuv = maxuv;
-
-				outStream.Append(output[0]);
-				outStream.Append(output[1]);
-				outStream.Append(output[2]);
-
-				outStream.RestartStrip();
-			}
 		}
 
 		float rand(float2 texcoords)
@@ -682,62 +306,39 @@ SubShader {
 			//return frac(sin(dot(texcoords, float2(12.9898, 78.233))) * 43758.5453);
 		}
 
-		half4 raymarching(pixel_t input, float3 pos, float3 dir)
+		half4 raymarching(pixel_t input, float3 pos, float3 dir, float s)
 		{
-			const float PlaceAmount = _PlaceAmount * _Thickness;
 
-			float4 samp = mul(UNITY_MATRIX_I_M, float4(pos + dir, 1.0f));
+			float4 samp = mul(UNITY_MATRIX_I_M, float4(pos + dir * s, 1.0f));
+			samp.z += 0.5f;
 
-			float3 texcoord = mul((float3x3)UNITY_MATRIX_I_M, dir * 0.5f);
-			texcoord.xy *= input.texscale;
+			float3 texcoord = mul((float3x3)UNITY_MATRIX_I_M, dir * s);
 			float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
 			Light mainLight = GetMainLight(shadowCoord);
 
-			float2 samplePos =  clamp(input.texcoord0.xy + texcoord.xy, input.minuv, input.maxuv);
+			float2 samplePos = input.texcoord0.xy + texcoord.xy;
 
-			half d = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, samplePos).a * input.param.x * (step(_Thickness, 1.0f - abs(samp.z) - PlaceAmount * 0.5f) - step(samp.z, _Thickness));
+			half d = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, samplePos).a * input.param.x * (step(0.0f, 1.0f - abs(samp.z)) - step(samp.z, 0.0f));
 			half4 c = input.faceColor * saturate(d - input.param.w);
 
 			float3 lightOS = mul((float3x3)UNITY_MATRIX_I_M, normalize(mainLight.direction));
-			lightOS.xy *= input.texscale;
 
 			float intensity = 0.0f;
 			int lightstep = 8;
 			float lightstepscale = 0.1f;
 			for (int i = 0; i < lightstep; i++)
 			{
-				samplePos = clamp(input.texcoord0.xy + texcoord.xy + lightOS.xy * (i + 1) / lightstep * lightstepscale, input.minuv, input.maxuv);
+				samplePos = input.texcoord0.xy + texcoord.xy + lightOS.xy * (i + 1) / lightstep * lightstepscale;
 				float z = abs(samp.z + lightOS.z * (i + 1) / lightstep * lightstepscale);
-				intensity += (SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, samplePos).a * input.param.x * ((step(_Thickness, 1.0f - z) - PlaceAmount * 0.5f) - step(z, _Thickness)) - input.param.w);
+				intensity += (SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, samplePos).a * input.param.x * ((step(0.0f, 1.0f - z)) - step(z, 0.0f)) - input.param.w);
 			}
 
 
 			intensity = saturate(intensity);
 
 			#ifdef OUTLINE_ON
-			c = lerp(input.outlineColor, input.faceColor, saturate(d - input.param.z));
-			c *= saturate(d - input.param.y);
-			#endif
-
-			#if UNDERLAY_ON
-			d = tex2D(_MainTex, input.texcoord1.xy).a * input.underlayParam.x;
-			c += float4(_UnderlayColor.rgb * _UnderlayColor.a, _UnderlayColor.a) * saturate(d - input.underlayParam.y) * (1 - c.a);
-			#endif
-
-			#if UNDERLAY_INNER
-			half sd = saturate(d - input.param.z);
-			d = tex2D(_MainTex, input.texcoord1.xy).a * input.underlayParam.x;
-			c += float4(_UnderlayColor.rgb * _UnderlayColor.a, _UnderlayColor.a) * (1 - saturate(d - input.underlayParam.y)) * sd * (1 - c.a);
-			#endif
-
-			// Alternative implementation to UnityGet2DClipping with support for softness.
-			#if UNITY_UI_CLIP_RECT
-			half2 m = saturate((_ClipRect.zw - _ClipRect.xy - abs(input.mask.xy)) * input.mask.zw);
-			c *= m.x * m.y;
-			#endif
-
-			#if (UNDERLAY_ON | UNDERLAY_INNER)
-			c *= input.texcoord1.z;
+			// c = lerp(input.outlineColor, input.faceColor, saturate(d - input.param.z));
+			// c *= saturate(d - input.param.y);
 			#endif
 			
 			c.rgb *= max(saturate(1.0f - intensity), 0.05f);
@@ -761,9 +362,10 @@ SubShader {
 
 			for (int i = 0; i < stepCount; i++)
 			{
-				c += raymarching(input, positionWS, dir.xyz * ((float)i + rand(input.texcoord0.xy)) * _Thickness * _PlaceAmount * _StepSize) / stepCount * (stepCount - i) * 0.3f;
+				c += raymarching(input, positionWS, dir.xyz, ((float)i + rand(input.texcoord0.xy)) / stepCount * _StepSize);
 			} 
 
+			// return float4(input.texcoord0.xy, 0, 1);
 			clip(c.a - 0.001);
 
 			return float4(max(c.rgb, float3(0.0f, 0.0f, 0.0f)), saturate(c.a));

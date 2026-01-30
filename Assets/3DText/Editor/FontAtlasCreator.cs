@@ -50,7 +50,8 @@ public class FontAtlasCreatorWindow : EditorWindow
     private RenderTexture resultTexture;
     private RenderTexture sdfTexture;
 
-    private Dictionary<char, int> characterIndex;
+    private Dictionary<char, int> characterIndicies;
+    private Dictionary<int, Vector4> characterTexcoords;
 
     private int blurPassKernel;
     private int firstPassFilterKernel;
@@ -106,7 +107,8 @@ public class FontAtlasCreatorWindow : EditorWindow
 
         glyphs = new List<Glyph>();
 
-        characterIndex = new Dictionary<char, int>();
+        characterIndicies = new Dictionary<char, int>();
+        characterTexcoords = new Dictionary<int, Vector4>();
 
         int index = 0;
 
@@ -115,7 +117,7 @@ public class FontAtlasCreatorWindow : EditorWindow
             if (FontEngine.TryGetGlyphWithUnicodeValue(character, GlyphLoadFlags.LOAD_COMPUTE_METRICS | GlyphLoadFlags.LOAD_NO_BITMAP, out var glyph))
             {
                 glyphs.Add(glyph);
-                characterIndex.Add(character, index);
+                characterIndicies.Add(character, index);
                 index++;
             }
         }
@@ -148,6 +150,8 @@ public class FontAtlasCreatorWindow : EditorWindow
 
             Glyph glyph = glyphs[i];
             glyph.glyphRect = new GlyphRect(x, y, fontSize, fontSize);
+
+            characterTexcoords.Add(i, new Vector4(x, y, x + fontSize, y + fontSize));
 
             FontEngineProxy.RenderGlyphToTexture(glyph, 9, GlyphRenderMode.SMOOTH, baseAtlasTexture);
         }
@@ -249,18 +253,133 @@ public class FontAtlasCreatorWindow : EditorWindow
         RenderTexture.active = tmp;
 
         texture.name = "Font Atlas";
-        FontAtlas atlas = FontAtlas.CreateFontAtlas(texture, characterIndex, fontSize, width, height);
+        FontAtlas atlas = FontAtlas.CreateFontAtlas(texture, characterIndicies, fontSize, width, height);
 
+        {
+            AssetDatabase.CreateAsset(atlas, path);
 
-        AssetDatabase.CreateAsset(atlas, path);
+            AssetDatabase.AddObjectToAsset(texture, atlas);
 
-        AssetDatabase.AddObjectToAsset(texture, atlas);
+            EditorUtility.SetDirty(atlas);
 
-        EditorUtility.SetDirty(atlas);
+            AssetDatabase.SaveAssets();
 
-        AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+        }
 
-        AssetDatabase.Refresh();
+        foreach (var item in characterTexcoords)
+        {
+            Mesh mesh = new Mesh();
+
+            var verticies = new Vector3[]
+            {
+                // ===== Front (+Z) =====
+                //new Vector3(-0.5f, -0.5f, 0.5f),
+                //new Vector3(0.5f, -0.5f, 0.5f),
+                //new Vector3(0.5f, 0.5f, 0.5f),
+                //new Vector3(-0.5f, 0.5f, 0.5f),
+
+                new Vector3(0.5f, -0.5f, -0.0f),
+                new Vector3(-0.5f, -0.5f, -0.0f),
+                new Vector3(-0.5f, 0.5f, -0.0f),
+                new Vector3(0.5f, 0.5f, -0.0f),
+
+                //new Vector3(-0.5f, -0.5f, -0.5f),
+                //new Vector3(-0.5f, -0.5f, 0.5f),
+                //new Vector3(-0.5f, 0.5f, 0.5f),
+                //new Vector3(-0.5f, 0.5f, -0.5f),
+
+                //new Vector3(0.5f, -0.5f, 0.5f),
+                //new Vector3(0.5f, -0.5f, -0.5f),
+                //new Vector3(0.5f, 0.5f, -0.5f),
+                //new Vector3(0.5f, 0.5f, 0.5f),
+
+                //new Vector3(-0.5f, 0.5f, 0.5f),
+                //new Vector3(0.5f, 0.5f, 0.5f),
+                //new Vector3(0.5f, 0.5f, -0.5f),
+                //new Vector3(-0.5f, 0.5f, -0.5f),
+
+                //new Vector3(-0.5f, -0.5f, -0.5f),
+                //new Vector3(0.5f, -0.5f, -0.5f),
+                //new Vector3(0.5f, -0.5f, 0.5f),
+                //new Vector3(-0.5f, -0.5f, 0.5f),
+            };
+
+            float baseU = item.Value.x / width;
+            float baseV = item.Value.y / height;
+
+            float offsetU = item.Value.z / width;
+            float offsetV = item.Value.w / height;
+
+            //baseU = baseV = 0.0f;
+            //offsetU = offsetV = 1.0f;
+
+            var texcoords = new Vector2[]
+            {                
+                // ===== Front (+Z) =====
+                //new Vector2(baseU, baseV),
+                //new Vector2(offsetU, baseV),
+                //new Vector2(offsetU, offsetV),
+                //new Vector2(baseU, offsetV),
+                
+                //// ===== Back (-Z) =====
+                new Vector2(offsetU, baseV),
+                new Vector2(baseU, baseV),
+                new Vector2(baseU, offsetV),
+                new Vector2(offsetU, offsetV),
+
+                //// ===== Right (+X) =====
+                //new Vector2(baseU, baseV),
+                //new Vector2(baseU, baseV),
+                //new Vector2(baseU, offsetV),
+                //new Vector2(baseU, offsetV),
+                
+                //// ===== Left (-X) =====
+                //new Vector2(offsetU, baseV),
+                //new Vector2(offsetU, baseV),
+                //new Vector2(offsetU, offsetV),
+                //new Vector2(offsetU, offsetV),
+                
+                //// ===== Top (+Y) =====
+                //new Vector2(baseU, offsetV),
+                //new Vector2(offsetU, offsetV),
+                //new Vector2(offsetU, offsetV),
+                //new Vector2(baseU, offsetV),
+                
+                //// ===== Bottom (-Y) =====
+                //new Vector2(baseU, baseV),
+                //new Vector2(offsetU, baseV),
+                //new Vector2(offsetU, baseV),
+                //new Vector2(baseU, baseV),
+            };
+
+            var indices = new int[]
+            {
+                 0, 1, 2,  0, 2, 3,   // Front
+                // 4, 5, 6,  4, 6, 7,   // Back
+                // 8, 9,10,  8,10,11,   // Left
+                //12,13,14, 12,14,15,   // Right
+                //16,17,18, 16,18,19,   // Top
+                //20,21,22, 20,22,23    // Bottom
+            };
+
+            mesh.vertices = verticies;
+            mesh.uv = texcoords;
+            mesh.triangles = indices;
+            mesh.name = item.Key.ToString();
+
+            AssetDatabase.AddObjectToAsset(mesh, atlas);
+
+            EditorUtility.SetDirty(atlas);
+
+            AssetDatabase.SaveAssets();
+
+            AssetDatabase.Refresh();
+        }
+    }
+
+    private void SaveMeshes()
+    {
     }
 
     private void Release()
